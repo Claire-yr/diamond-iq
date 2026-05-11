@@ -1,0 +1,167 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String   // password hash
+  name      String?
+  role      Role     @default(PLAYER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  coachedTeams Team[]       @relation("TeamCoach")
+  playedTeams  TeamPlayer[] // join table side
+  gameResults  Game[]
+  drillSessions DrillSession[]
+  hostedRooms  Room[]       @relation("RoomHost")
+  decisions    DecisionRecord[]
+  customScenarios CustomScenario[]
+  scenarioAssignments ScenarioAssignment[]
+
+  @@map("users")
+}
+
+model Team {
+  id         String   @id @default(cuid())
+  name       String
+  inviteCode String   @unique @default(cuid())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Relations
+  coachId String @unique
+  coach   User   @relation("TeamCoach", fields: [coachId], references: [id])
+
+  players    TeamPlayer[]
+  games      Game[]
+  rooms      Room[]
+
+  @@map("teams")
+}
+
+// Join table for Team <-> User (players)
+model TeamPlayer {
+  id        String   @id @default(cuid())
+  teamId    String
+  userId    String
+  joinedAt  DateTime @default(now())
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@map("team_players")
+}
+
+model Game {
+  id        String   @id @default(cuid())
+  teamId    String
+  state     Json     // GameState JSON
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@map("games")
+}
+
+model DrillSession {
+  id        String   @id @default(cuid())
+  userId    String
+  score     Int      @default(0)
+  details   Json?    // drill details JSON
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("drill_sessions")
+}
+
+model Room {
+  id        String       @id @default(cuid())
+  teamId    String
+  code      String       @unique
+  hostId    String
+  state     Json?        // room state JSON
+  status    RoomStatus   @default(WAITING)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  host User @relation("RoomHost", fields: [hostId], references: [id])
+
+  decisions DecisionRecord[]
+
+  @@map("rooms")
+}
+
+model DecisionRecord {
+  id           String   @id @default(cuid())
+  roomId       String
+  userId       String
+  scenario     Json     // scenario JSON
+  choice       String   // the user's chosen action
+  correct      Boolean  // was the choice correct?
+  reactionTime Int?     // milliseconds
+  createdAt    DateTime @default(now())
+
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("decision_records")
+}
+
+model CustomScenario {
+  id          String   @id @default(cuid())
+  coachId     String
+  name        String
+  description String?
+  state       Json     // GameState JSON
+  event       Json     // BatterEvent JSON
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  coach User  @relation(fields: [coachId], references: [id], onDelete: Cascade)
+  assignments ScenarioAssignment[]
+
+  @@map("custom_scenarios")
+}
+
+model ScenarioAssignment {
+  id        String   @id @default(cuid())
+  scenarioId String
+  userId    String
+  completed Boolean  @default(false)
+  score     Int?
+  createdAt DateTime @default(now())
+
+  scenario CustomScenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([scenarioId, userId])
+  @@map("scenario_assignments")
+}
+
+enum Role {
+  COACH
+  PLAYER
+  @@map("roles")
+}
+
+enum RoomStatus {
+  WAITING
+  ACTIVE
+  COMPLETED
+  @@map("room_statuses")
+}
